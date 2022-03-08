@@ -12,11 +12,13 @@ String selectedPort;
 
 // Spinning values
 // HILO defaults: min 20 max 80
-int draftingSpeedPerc = 20;
+int draftingSpeedPerc = 30;
 //HILO defaults: min 200 max 700
-int spindleSpeedSteps = 400;
+int spindleSpeedSteps = 700;
 // HILO default: 300
 int deliverySpeedSteps = 300;
+// Set to 0 because the elevator only goes in one direction.
+int elevatorSpeedSteps = 0;
 
 void setup() {
   println("Setting up");
@@ -36,12 +38,6 @@ void draw() {
 
 void startSpinning() {
    hilo.connect(selectedPort);
-}
-
-// Upload configuration parameters to the machine
-void uploadHILOConfig() {
-  hilo.setDeliverySpeed(deliverySpeedSteps);
-  hilo.setSpindleSpeed(spindleSpeedSteps);
 }
 
 // Called by Processing when a key is pressed

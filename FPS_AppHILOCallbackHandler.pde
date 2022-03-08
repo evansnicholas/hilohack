@@ -8,7 +8,9 @@ class AppHILOCallbackHandler implements HILOCallbackHandler {
   void onHILOConnected() {
     debugMessage("onHILOConnected()");
     debugMessage("Connected on " + selectedPort);
-    uploadHILOConfig();
+    hilo.setDeliverySpeed(deliverySpeedSteps);
+    hilo.setSpindleSpeed(spindleSpeedSteps);
+    hilo.setElevatorSpeed(elevatorSpeedSteps);
   }
 
   // Called when HILO is disconnected.
