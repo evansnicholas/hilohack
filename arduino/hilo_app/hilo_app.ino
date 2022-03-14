@@ -25,7 +25,7 @@ int DELIVERY_SPEED            = 280;
 int SPINDLE_SPEED             = 700;
 int ELEVATOR_SPEED            =  0;
 
-float ACCELERATION = 200.00f;
+float ACCELERATION = 400.00f;
 
 bool IS_RUNNING = false;
 
@@ -79,6 +79,12 @@ void serialCommunicationLoop() {
       Serial.print("Delivery speed set to: ");
       Serial.println(DELIVERY_SPEED);
     }
+    if (data.startsWith("p")) {
+      int draftingPercentage = data.substring(1).toInt();
+      DRAFTING_SPEED_PERCENTAGE = draftingPercentage;
+      Serial.print("Drafting percentage set to: ");
+      Serial.println(DRAFTING_SPEED_PERCENTAGE);
+    }
   }
 }
 
@@ -94,8 +100,11 @@ void stopMachine() {
   Serial.println("Stopping machine");
   IS_RUNNING = false;
   motorDrafting.stop();
+  motorDrafting.setCurrentPosition(0);
   motorDelivery.stop();
+  motorDelivery.setCurrentPosition(0);
   motorSpindle.stop();
+  motorSpindle.setCurrentPosition(0);
   setSteppersEnabled(false);
 }
 
