@@ -25,7 +25,7 @@ int DELIVERY_SPEED            = 280;
 int SPINDLE_SPEED             = 700;
 int ELEVATOR_SPEED            =  0;
 
-float ACCELERATION = 400.00f;
+float ACCELERATION = 500.00f;
 
 bool IS_RUNNING = false;
 
