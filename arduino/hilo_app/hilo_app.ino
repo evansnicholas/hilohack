@@ -28,6 +28,7 @@ int ELEVATOR_SPEED            =  0;
 float ACCELERATION = 500.00f;
 
 bool IS_RUNNING = false;
+long START_COUNTER = 0;
 
 AccelStepper motorDrafting(AccelStepper::DRIVER, PIN_DRAFTING_STEP, PIN_DRAFTING_DIR);
 AccelStepper motorDelivery(AccelStepper::DRIVER, PIN_DELIVERY_STEP, PIN_DELIVERY_DIR);
@@ -99,6 +100,7 @@ void startStopMachine() {
 void stopMachine() {
   Serial.println("Stopping machine");
   IS_RUNNING = false;
+  START_COUNTER = 0;
   motorDrafting.stop();
   motorDrafting.setCurrentPosition(0);
   motorDelivery.stop();
@@ -143,8 +145,13 @@ void startMachine() {
 void runMachineLoop() {
   if (IS_RUNNING) {
       motorDrafting.run();
-      motorDelivery.run();
       motorSpindle.run();
+      if (START_COUNTER > 10000) { 
+        // Build in a delay in starting the delivery, to allow for some twist build up.
+        motorDelivery.run();
+      } else {
+        START_COUNTER = START_COUNTER + 1;
+      }
   }
 }
 
