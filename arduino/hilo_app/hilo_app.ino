@@ -37,6 +37,9 @@ AccelStepper motorSpindle  (AccelStepper::DRIVER, PIN_SPINDLE_STEP,    PIN_SPIND
 
 void setup() {
   Serial.begin(HILO_SERIAL_BAUDRATE);
+
+  // Setup ScreenController
+  setupScreenController();
   
   Serial.println("Starting HILO Machine");
   
@@ -56,6 +59,7 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   serialCommunicationLoop();
+  screenControllerLoop();
   runMachineLoop();
 }
 
