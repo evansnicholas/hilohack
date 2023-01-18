@@ -41,6 +41,15 @@ int sdvolumefattype;
 unsigned long sdvolumebpc;
 unsigned long sdvolumecc;
 
+// New variables
+const long encoderReadInterval = 1000/3;
+int encoderChange = 0;
+unsigned long previousEncoderMillis = 0;
+
+// Hilo variables
+char deliverySpeedStr[4];                         //Char array to store delivery speed as string
+char draftingSpeedStr[4];                         //Char array to store drafting speed as string
+char spindleSpeedStr[4];                         //Char array to store spindle speed as string
 
 // SPI Com: SCK = en = 23, MOSI = rw = 17, CS = di = 16
 U8GLIB_ST7920_128X64_1X u8g(DOGLCD_SCK, DOGLCD_MOSI, DOGLCD_CS);
@@ -61,19 +70,14 @@ void setupScreenController() {
 }
 
 void screenControllerLoop() {
+  currentMillis = millis();
+  
   // Read the encoder and update encoderPos    
-  encoder0PinNow = digitalRead(BTN_EN2);  // Current Digital read of scrollRight
-  if ((encoder0PinALast == HIGH) && (encoder0PinNow == LOW)) {
-    if (digitalRead(BTN_EN1) == LOW) {
-      encoderPos++;
-    } else {
-      encoderPos--;
-    }
-  }
-  encoder0PinALast = encoder0PinNow;
+  encoderTrigger();
+  updateEncoderPosition();
+  
 
   //check if it is time to update the display 
-  currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
     
@@ -94,7 +98,7 @@ void screenControllerLoop() {
     //Draw new screen
     u8g.firstPage();
     do {  
-      draw();
+      drawHilo();
     } while( u8g.nextPage() );
 
     //Update Title position
@@ -102,6 +106,58 @@ void screenControllerLoop() {
     if (x > 40) scroll_direction = -1;
     if (x < 1) scroll_direction = 1;
   }
+}
+
+void updateEncoderPosition() {
+  // If the time has passed we check for a change, update the position and reset the trigger.
+  if ((currentMillis - previousEncoderMillis) >= encoderReadInterval) {
+     previousEncoderMillis = currentMillis;
+     encoderPos += encoderChange;
+     encoderChange = 0;
+  }
+}
+
+void encoderTrigger() {
+  if (encoderChange != 0) {
+    // We've detected an encoder change so we are done until it resets.
+    return;
+  }
+  
+  encoder0PinNow = digitalRead(BTN_EN2);  // Current Digital read of scrollRight
+  if ((encoder0PinALast == HIGH) && (encoder0PinNow == LOW)) {
+    if (digitalRead(BTN_EN1) == LOW) {
+      encoderChange = 10;
+    } else {
+      encoderChange = -10;
+    }
+  }
+  encoder0PinALast = encoder0PinNow;
+  // No change so do nothing
+}
+
+void drawHilo() {
+  unsigned int h = u8g.getFontAscent()-u8g.getFontDescent();
+  unsigned int w = u8g.getWidth();
+  u8g.drawBox(0, 0, w, h + 2);
+  u8g.setDefaultBackgroundColor();
+  u8g.drawStr(2, 10, "Hallo Hilo!");
+
+  u8g.setDefaultForegroundColor();
+
+  
+  u8g.drawStr( 2, 3*9, "Delivery");
+  sprintf (posStr, "%d", encoderPos);
+  u8g.drawStr( 84, 3*9, posStr);
+
+  u8g.drawStr( 2, 4*9, "Drafting");
+  sprintf (draftingSpeedStr, "%d", DRAFTING_SPEED_PERCENTAGE);
+  u8g.drawStr( 84, 4*9, draftingSpeedStr);
+
+  u8g.drawStr( 2, 5*9, "Spindle");
+  sprintf (spindleSpeedStr, "%d", SPINDLE_SPEED);
+  u8g.drawStr( 84, 5*9, spindleSpeedStr);
+
+  u8g.drawStr( 2, 7*9, "Start");
 }
 
 void draw() {
