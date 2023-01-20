@@ -43,23 +43,27 @@ unsigned long sdvolumecc;
 
 // New variables
 const long encoderReadInterval = 1000/3;
+const long encoderButtonReadInterval = 1000;
 int encoderChange = 0;
+boolean encoderButtonTriggered = false;
 unsigned long previousEncoderMillis = 0;
+unsigned long previousEncoderButtonMillis = 0;
 char spindleDirection = 'S';
 
 // Hilo Menu 
 
-typedef struct {
+struct MenuLine {
   char name[10];
+  int values;
   int *value1;
   char *value2;
-} menuLine;
+};
 
-const menuLine menuItems[4] = { 
-  { "Delivery",  DELIVERY_SPEED, NULL},
-  { "Drafting",  DRAFTING_SPEED_PERCENTAGE, NULL},
-  { "Spindle",  SPINDLE_SPEED,  spindleDirection },
-  { "Start" }
+const MenuLine menuItems[4] = { 
+  { "Delivery",  1, DELIVERY_SPEED, NULL},
+  { "Drafting",  1, DRAFTING_SPEED_PERCENTAGE, NULL},
+  { "Spindle",  2, SPINDLE_SPEED,  spindleDirection },
+  { "Start", 0 }
 };
 
 boolean menuLineSelected = false;
@@ -89,6 +93,7 @@ void screenControllerLoop() {
   
   // Read the encoder and update encoderPos    
   encoderTrigger();
+  encoderButtonTrigger();
   updateMenuPosition();
   
 
@@ -124,21 +129,51 @@ void screenControllerLoop() {
 
 void updateMenuPosition() {
   // If the time has passed we check for a change, update the position and reset the trigger.
+  if ((currentMillis - previousEncoderButtonMillis) >= encoderButtonReadInterval) {
+    previousEncoderButtonMillis = currentMillis;
+    encoderButtonTriggered = false;
+  }
   if ((currentMillis - previousEncoderMillis) >= encoderReadInterval) {
      previousEncoderMillis = currentMillis;
-     if (lineSelected) {
-       // update within line 
+     if (menuLineSelected) {
+       // Do nothing because the line is selected.
      } else {
-      menuLinePos = (menuLinePos + encoderChange) % 4;
+      menuLinePos = abs(menuLinePos + encoderChange) % 4;
      }
      encoderChange = 0;
   }
 }
 
+int getMenuLineItemValues() {
+  return menuItems[menuLinePos].values;  
+}
+
 void encoderButtonTrigger() {
+  if (encoderButtonTriggered) {
+    // We've detected a trigger so skip.
+    return;
+  }
   //read the encoder button status
   enc_pin_status = digitalRead(BTN_ENC);
-  menuLineSelected = !menuLineSelected;
+  if (!enc_pin_status) {
+    if (menuLineSelected) {
+      int values = getMenuLineItemValues();
+      if (menuLineItemPos < values - 1) {
+       // There are still values to go so don't unselect the line and move the line item selection
+       int values = getMenuLineItemValues();
+       menuLineItemPos = (menuLineItemPos + 1) % values;
+      } else {
+        // Unselect the line and reset the line item pos.
+        menuLineItemPos = 0;
+        menuLineSelected = false;
+      }
+      
+    } else {
+      menuLineSelected = true;
+    }
+    encoderButtonTriggered = true;
+  }
+  
 }
 
 void encoderTrigger() {
@@ -171,30 +206,57 @@ void drawHilo() {
   
   int i;
   int s = 3;
-  sprintf (posStr, "%d", encoderPos);
   for( i = 0; i < 4; i++ ) {
-    u8g.setDefaultForegroundColor();
     if (i == 3) {
       s++;
     }
-    if (menuLinePos == i) {
-      if (!menuLineSelected) {
-        u8g.drawBox(0, ((i+s)*9-h), w, h);
-        u8g.setDefaultBackgroundColor(); 
-      }
-    }
-    u8g.drawStr( 2, (i+s)*9, menuItems[i].name);
-    if (menuItems[i].value1 != NULL) {
+    drawMenuLine(menuItems[i], i, s, h, w);
+  }  
+}
+
+void drawMenuLine( struct MenuLine menuItem, int i, int s, int h, int w) {
+  u8g.setDefaultForegroundColor();
+  if (menuLinePos != i) {
+    u8g.drawStr( 2, (i+s)*9, menuItem.name);
+    if (menuItem.value1 != NULL) {
        char value1[4];
-       sprintf (value1, "%d", menuItems[i].value1);
+       sprintf (value1, "%d", menuItem.value1);
        u8g.drawStr( 78, (i+s)*9, value1);
     }
-    if (menuItems[i].value2 != NULL) {
+    if (menuItem.value2 != NULL) {
        char value2[1];
-       sprintf (value2, "%c", menuItems[i].value2);
+       sprintf (value2, "%c", menuItem.value2);
        u8g.drawStr( 110, (i+s)*9, value2);
     }
-  }  
+  } else {
+      if (!menuLineSelected) {
+        u8g.drawBox(0, ((i+s)*9-h), w, h);
+        u8g.setDefaultBackgroundColor();
+      }
+      u8g.drawStr( 2, (i+s)*9, menuItem.name);
+      if (menuItem.value1 != NULL) {
+        char value1[4];
+        sprintf (value1, "%d", menuItem.value1);
+        if (menuLineSelected && menuLineItemPos == 0) {      
+          u8g.setDefaultForegroundColor();  
+          u8g.drawBox(78, ((i+s)*9-h), 18, h);
+          u8g.setDefaultBackgroundColor();
+        }
+        u8g.drawStr( 78, (i+s)*9, value1);
+      }
+      if (menuItem.value2 != NULL) {
+        char value2[1];
+        sprintf (value2, "%c", menuItem.value2);
+        if (menuLineSelected && menuLineItemPos == 1) {
+          u8g.setDefaultForegroundColor(); 
+          u8g.drawBox(110, ((i+s)*9-h), 10, h);
+          u8g.setDefaultBackgroundColor();
+        } else if (menuLineSelected) {
+           u8g.setDefaultForegroundColor();
+        }
+        u8g.drawStr( 110, (i+s)*9, value2);
+      }
+  }
 }
 
 void draw() {
