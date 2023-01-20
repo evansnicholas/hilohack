@@ -45,11 +45,26 @@ unsigned long sdvolumecc;
 const long encoderReadInterval = 1000/3;
 int encoderChange = 0;
 unsigned long previousEncoderMillis = 0;
+char spindleDirection = 'S';
 
-// Hilo variables
-char deliverySpeedStr[4];                         //Char array to store delivery speed as string
-char draftingSpeedStr[4];                         //Char array to store drafting speed as string
-char spindleSpeedStr[4];                         //Char array to store spindle speed as string
+// Hilo Menu 
+
+typedef struct {
+  char name[10];
+  int *value1;
+  char *value2;
+} menuLine;
+
+const menuLine menuItems[4] = { 
+  { "Delivery",  DELIVERY_SPEED, NULL},
+  { "Drafting",  DRAFTING_SPEED_PERCENTAGE, NULL},
+  { "Spindle",  SPINDLE_SPEED,  spindleDirection },
+  { "Start" }
+};
+
+boolean menuLineSelected = false;
+int menuLinePos = 0;
+int menuLineItemPos = 0;
 
 // SPI Com: SCK = en = 23, MOSI = rw = 17, CS = di = 16
 U8GLIB_ST7920_128X64_1X u8g(DOGLCD_SCK, DOGLCD_MOSI, DOGLCD_CS);
@@ -65,8 +80,8 @@ void setupScreenController() {
   //digitalWrite(BTN_EN2, HIGH);          // turn on pullup resistors
   pinMode(BTN_ENC, INPUT);              // Set BTN_ENC as an input, encoder button
   digitalWrite(BTN_ENC, HIGH);          // turn on pullup resistors
-  u8g.setFont(u8g_font_helvR08);        // Set the font for the display
-  u8g.setColorIndex(1);                 // Instructs the display to draw with a pixel on.
+  u8g.begin();
+  Serial.println(menuItems[3].name);
 }
 
 void screenControllerLoop() {
@@ -74,7 +89,7 @@ void screenControllerLoop() {
   
   // Read the encoder and update encoderPos    
   encoderTrigger();
-  updateEncoderPosition();
+  updateMenuPosition();
   
 
   //check if it is time to update the display 
@@ -83,8 +98,7 @@ void screenControllerLoop() {
     
     //read the kill pin status
     kill_pin_status = digitalRead(KILL_PIN); 
-    //read the encoder button status
-    enc_pin_status = digitalRead(BTN_ENC);
+    
     //read the SD detect pin status  
     sd_detect_pin_status = digitalRead(SD_DETECT_PIN);
     if (sd_detect_pin_status) {
@@ -108,13 +122,23 @@ void screenControllerLoop() {
   }
 }
 
-void updateEncoderPosition() {
+void updateMenuPosition() {
   // If the time has passed we check for a change, update the position and reset the trigger.
   if ((currentMillis - previousEncoderMillis) >= encoderReadInterval) {
      previousEncoderMillis = currentMillis;
-     encoderPos += encoderChange;
+     if (lineSelected) {
+       // update within line 
+     } else {
+      menuLinePos = (menuLinePos + encoderChange) % 4;
+     }
      encoderChange = 0;
   }
+}
+
+void encoderButtonTrigger() {
+  //read the encoder button status
+  enc_pin_status = digitalRead(BTN_ENC);
+  menuLineSelected = !menuLineSelected;
 }
 
 void encoderTrigger() {
@@ -126,9 +150,9 @@ void encoderTrigger() {
   encoder0PinNow = digitalRead(BTN_EN2);  // Current Digital read of scrollRight
   if ((encoder0PinALast == HIGH) && (encoder0PinNow == LOW)) {
     if (digitalRead(BTN_EN1) == LOW) {
-      encoderChange = 10;
+      encoderChange = 1;
     } else {
-      encoderChange = -10;
+      encoderChange = -1;
     }
   }
   encoder0PinALast = encoder0PinNow;
@@ -136,28 +160,41 @@ void encoderTrigger() {
 }
 
 void drawHilo() {
+  u8g.setFont(u8g_font_helvR08);        // Set the font for the display
+  u8g.setDefaultForegroundColor();
   unsigned int h = u8g.getFontAscent()-u8g.getFontDescent();
   unsigned int w = u8g.getWidth();
   u8g.drawBox(0, 0, w, h + 2);
   u8g.setDefaultBackgroundColor();
   u8g.drawStr(2, 10, "Hallo Hilo!");
-
   u8g.setDefaultForegroundColor();
-
   
-  u8g.drawStr( 2, 3*9, "Delivery");
+  int i;
+  int s = 3;
   sprintf (posStr, "%d", encoderPos);
-  u8g.drawStr( 84, 3*9, posStr);
-
-  u8g.drawStr( 2, 4*9, "Drafting");
-  sprintf (draftingSpeedStr, "%d", DRAFTING_SPEED_PERCENTAGE);
-  u8g.drawStr( 84, 4*9, draftingSpeedStr);
-
-  u8g.drawStr( 2, 5*9, "Spindle");
-  sprintf (spindleSpeedStr, "%d", SPINDLE_SPEED);
-  u8g.drawStr( 84, 5*9, spindleSpeedStr);
-
-  u8g.drawStr( 2, 7*9, "Start");
+  for( i = 0; i < 4; i++ ) {
+    u8g.setDefaultForegroundColor();
+    if (i == 3) {
+      s++;
+    }
+    if (menuLinePos == i) {
+      if (!menuLineSelected) {
+        u8g.drawBox(0, ((i+s)*9-h), w, h);
+        u8g.setDefaultBackgroundColor(); 
+      }
+    }
+    u8g.drawStr( 2, (i+s)*9, menuItems[i].name);
+    if (menuItems[i].value1 != NULL) {
+       char value1[4];
+       sprintf (value1, "%d", menuItems[i].value1);
+       u8g.drawStr( 78, (i+s)*9, value1);
+    }
+    if (menuItems[i].value2 != NULL) {
+       char value2[1];
+       sprintf (value2, "%c", menuItems[i].value2);
+       u8g.drawStr( 110, (i+s)*9, value2);
+    }
+  }  
 }
 
 void draw() {
