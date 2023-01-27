@@ -21,9 +21,10 @@
 #define PIN_ELEVATOR_A_ENABLE 24  // Elevator Motors Enable Pin
 
 int DRAFTING_SPEED_PERCENTAGE = 40;
-int DELIVERY_SPEED            = 280;
+int DELIVERY_SPEED            = 150;
 int SPINDLE_SPEED             = 700;
 int ELEVATOR_SPEED            =  0;
+char SPINDLE_DIRECTION = 'S';
 
 float ACCELERATION = 500.00f;
 
@@ -93,12 +94,13 @@ void serialCommunicationLoop() {
   }
 }
 
-void startStopMachine() {
+boolean startStopMachine() {
   if (IS_RUNNING) {
     stopMachine();
   } else {
     startMachine();
   }
+  return IS_RUNNING;
 }
 
 void stopMachine() {
@@ -169,4 +171,29 @@ void setSteppersEnabled(bool enabled) {
   digitalWrite(PIN_DELIVERY_ENABLE,   value);
   digitalWrite(PIN_ELEVATOR_A_ENABLE, value);
   digitalWrite(PIN_SPINDLE_ENABLE,    value);
+}
+
+// Direction is +/- 1
+int incrementDraftingSpeedPercentage(int direction) {
+  DRAFTING_SPEED_PERCENTAGE = DRAFTING_SPEED_PERCENTAGE + 10*direction;
+  return DRAFTING_SPEED_PERCENTAGE;
+}
+
+int incrementDeliverySpeed(int direction) {
+  DELIVERY_SPEED = DELIVERY_SPEED + 50*direction;
+  return DELIVERY_SPEED;
+}
+
+int incrementSpindleSpeed(int direction) {
+  SPINDLE_SPEED = SPINDLE_SPEED + 100*direction;
+  return SPINDLE_SPEED;
+}
+
+char toggleSpindleDirection() {
+  if (SPINDLE_DIRECTION == 'S') {
+    SPINDLE_DIRECTION = 'Z';
+  } else {
+    SPINDLE_DIRECTION = 'S';
+  }
+  return SPINDLE_DIRECTION;
 }

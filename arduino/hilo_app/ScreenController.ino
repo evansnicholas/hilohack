@@ -44,11 +44,12 @@ unsigned long sdvolumecc;
 // New variables
 const long encoderReadInterval = 1000/3;
 const long encoderButtonReadInterval = 1000;
+const long startStopInterval = 1000;
 int encoderChange = 0;
 boolean encoderButtonTriggered = false;
 unsigned long previousEncoderMillis = 0;
 unsigned long previousEncoderButtonMillis = 0;
-char spindleDirection = 'S';
+unsigned long previousStartStopMillis = 0;
 
 // Hilo Menu 
 
@@ -59,10 +60,10 @@ struct MenuLine {
   char *value2;
 };
 
-const MenuLine menuItems[4] = { 
+MenuLine menuItems[4] = { 
   { "Delivery",  1, DELIVERY_SPEED, NULL},
   { "Drafting",  1, DRAFTING_SPEED_PERCENTAGE, NULL},
-  { "Spindle",  2, SPINDLE_SPEED,  spindleDirection },
+  { "Spindle",  2, SPINDLE_SPEED,  SPINDLE_DIRECTION },
   { "Start", 0 }
 };
 
@@ -91,43 +92,40 @@ void setupScreenController() {
 void screenControllerLoop() {
   currentMillis = millis();
   
-  // Read the encoder and update encoderPos    
-  encoderTrigger();
   encoderButtonTrigger();
-  updateMenuPosition();
-  
+  if (IS_RUNNING) {
+    // While running we want to do as little as possible to ensure a smooth run.
+    return;
+  }
+  encoderTrigger();
+  updateMenu();
 
   //check if it is time to update the display 
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
     
-    //read the kill pin status
-    kill_pin_status = digitalRead(KILL_PIN); 
-    
-    //read the SD detect pin status  
-    sd_detect_pin_status = digitalRead(SD_DETECT_PIN);
-    if (sd_detect_pin_status) {
-      gotsddata = false;
-    }
-  
-    //Check if both Kill switch and encoder are pressed, if so switch on buzzer
-    if(kill_pin_status || enc_pin_status) digitalWrite(BEEPER_PIN, LOW); 
-    else digitalWrite(BEEPER_PIN, HIGH);
+//    //read the kill pin status
+//    kill_pin_status = digitalRead(KILL_PIN); 
+//    
+//    //read the SD detect pin status  
+//    sd_detect_pin_status = digitalRead(SD_DETECT_PIN);
+//    if (sd_detect_pin_status) {
+//      gotsddata = false;
+//    }
+//  
+//    //Check if both Kill switch and encoder are pressed, if so switch on buzzer
+//    if(kill_pin_status || enc_pin_status) digitalWrite(BEEPER_PIN, LOW); 
+//    else digitalWrite(BEEPER_PIN, HIGH);
 
     //Draw new screen
     u8g.firstPage();
     do {  
       drawHilo();
     } while( u8g.nextPage() );
-
-    //Update Title position
-    x=x+scroll_direction;
-    if (x > 40) scroll_direction = -1;
-    if (x < 1) scroll_direction = 1;
   }
 }
 
-void updateMenuPosition() {
+void updateMenu() {
   // If the time has passed we check for a change, update the position and reset the trigger.
   if ((currentMillis - previousEncoderButtonMillis) >= encoderButtonReadInterval) {
     previousEncoderButtonMillis = currentMillis;
@@ -136,11 +134,36 @@ void updateMenuPosition() {
   if ((currentMillis - previousEncoderMillis) >= encoderReadInterval) {
      previousEncoderMillis = currentMillis;
      if (menuLineSelected) {
-       // Do nothing because the line is selected.
+       updateMenuValue();
      } else {
       menuLinePos = abs(menuLinePos + encoderChange) % 4;
      }
      encoderChange = 0;
+  }
+}
+
+void updateMenuValue() {
+  if (encoderChange == 0) {
+    // Nothing to do.
+    return;
+  }
+  switch(menuLinePos) {
+    case 0:
+      menuItems[0].value1 = incrementDeliverySpeed(encoderChange);
+      break;
+    case 1: 
+      menuItems[1].value1 = incrementDraftingSpeedPercentage(encoderChange);
+      break;
+    case 2: 
+      if (menuLineItemPos == 0) {
+        menuItems[2].value1 = incrementSpindleSpeed(encoderChange);
+      } else {
+        menuItems[2].value2 = toggleSpindleDirection();
+      }
+      break;
+     default:
+       Serial.println("Unrecognized menu line position");
+       break;
   }
 }
 
@@ -167,13 +190,13 @@ void encoderButtonTrigger() {
         menuLineItemPos = 0;
         menuLineSelected = false;
       }
-      
+    } else if (menuLinePos == 3) {
+      return toggleHilo();
     } else {
-      menuLineSelected = true;
+        menuLineSelected = true;
     }
     encoderButtonTriggered = true;
   }
-  
 }
 
 void encoderTrigger() {
@@ -212,6 +235,41 @@ void drawHilo() {
     }
     drawMenuLine(menuItems[i], i, s, h, w);
   }  
+}
+
+void toggleHilo() {
+  if (currentMillis - previousStartStopMillis < startStopInterval) {
+    // Too soon to toggle Hilo;
+    return;
+  }
+  previousStartStopMillis = currentMillis;
+  if (IS_RUNNING) {
+    stopHilo();
+  } else {
+    //Special case of starting the machine.
+    startHilo();
+  }
+}
+
+void startHilo() {
+  //Draw Hilo stop screen
+  u8g.firstPage();
+  do {  
+    drawHiloStop();
+  } while( u8g.nextPage() );
+  
+  startStopMachine();
+}
+
+void drawHiloStop() {
+  u8g.setFont(u8g_font_helvR08);
+  u8g.setDefaultForegroundColor();
+  u8g.drawStr(2, 10, "Running...");
+  u8g.drawStr(2, 19, "Press to stop.");
+}
+
+void stopHilo() {
+  startStopMachine();
 }
 
 void drawMenuLine( struct MenuLine menuItem, int i, int s, int h, int w) {
@@ -259,32 +317,32 @@ void drawMenuLine( struct MenuLine menuItem, int i, int s, int h, int w) {
   }
 }
 
-void draw() {
-  u8g.setColorIndex(0);
-  u8g.drawBox(0,0,128,64);
-  u8g.setColorIndex(1);
-  
-  u8g.drawStr( 2+x, 10, "Hallo Hilo!");
-  u8g.drawStr( 2, 3*9, "Stop pin status:");
-  if (kill_pin_status) u8g.drawStr( 84, 3*9, "Open");
-  else u8g.drawStr( 84, 3*9, "Closed");
-
-  u8g.drawStr( 2, 4*9, "Enc pin status:");
-  if (enc_pin_status) u8g.drawStr( 84, 4*9, "Open");
-  else u8g.drawStr( 84, 4*9, "Closed");
-
-  u8g.drawStr( 2, 6*9, "Encoder value:");
-  sprintf (posStr, "%d", encoderPos);
-  u8g.drawStr( 84, 6*9, posStr );
-  
-  u8g.drawStr( 2, 5*9, "SD detect status:");
-  if (sd_detect_pin_status) u8g.drawStr( 84, 5*9, "Open");
-  else u8g.drawStr( 84, 5*9, "Closed");
-  
-  
-  u8g.drawStr( 2, 7*9, "Buzzer:");
-  if (kill_pin_status || enc_pin_status) u8g.drawStr( 84, 7*9, "Off");
-  else u8g.drawStr( 84, 7*9, "On");
-
-  u8g.drawFrame(0,0,128,64);
-}
+//void draw() {
+//  u8g.setColorIndex(0);
+//  u8g.drawBox(0,0,128,64);
+//  u8g.setColorIndex(1);
+//  
+//  u8g.drawStr( 2+x, 10, "Hallo Hilo!");
+//  u8g.drawStr( 2, 3*9, "Stop pin status:");
+//  if (kill_pin_status) u8g.drawStr( 84, 3*9, "Open");
+//  else u8g.drawStr( 84, 3*9, "Closed");
+//
+//  u8g.drawStr( 2, 4*9, "Enc pin status:");
+//  if (enc_pin_status) u8g.drawStr( 84, 4*9, "Open");
+//  else u8g.drawStr( 84, 4*9, "Closed");
+//
+//  u8g.drawStr( 2, 6*9, "Encoder value:");
+//  sprintf (posStr, "%d", encoderPos);
+//  u8g.drawStr( 84, 6*9, posStr );
+//  
+//  u8g.drawStr( 2, 5*9, "SD detect status:");
+//  if (sd_detect_pin_status) u8g.drawStr( 84, 5*9, "Open");
+//  else u8g.drawStr( 84, 5*9, "Closed");
+//  
+//  
+//  u8g.drawStr( 2, 7*9, "Buzzer:");
+//  if (kill_pin_status || enc_pin_status) u8g.drawStr( 84, 7*9, "Off");
+//  else u8g.drawStr( 84, 7*9, "On");
+//
+//  u8g.drawFrame(0,0,128,64);
+//}
